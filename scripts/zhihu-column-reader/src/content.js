@@ -8,6 +8,8 @@
 (() => {
   'use strict';
 
+  // Citation helpers are embedded here by build-userscript.mjs.
+
   if (window.__ZR_READER_LOADED__) return;
   window.__ZR_READER_LOADED__ = true;
 
@@ -57,6 +59,7 @@
     userNavigated: false, resumeObserver: null, resumeTimer: null,
     viewer: null, comments: [], commentPath: [], commentReturn: null, articleKey: null,
     headings: [], tocOpen: false, statusTimer: null,
+    citationOpen: false, citationFocus: null, citationEpoch: 0,
     resumePending: false, resumePendingTimer: null, resumeAttempted: false, routeWait: null, routeSnapshot: null
   };
 
@@ -424,6 +427,7 @@
 
   function toggleTOC(force) {
     if (!state.ui) return;
+    if (force !== false && !state.tocOpen) closeCitation(false);
     state.tocOpen = typeof force === 'boolean' ? force : !state.tocOpen;
     state.ui.toc.hidden = !state.tocOpen;
     state.ui.toolbar.querySelector('[data-zr-act="toc"]').setAttribute('aria-expanded', String(state.tocOpen));
@@ -585,6 +589,148 @@
 
   /* -------------------------------------------------------------------- UI */
 
+  function selectedArticleText() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount !== 1 || !state.article) return '';
+    const range = selection.getRangeAt(0), rich = state.article.richEl;
+    if (!rich.contains(range.startContainer) || !rich.contains(range.endContainer)) return '';
+    return selection.toString().trim();
+  }
+
+  function citationForm() {
+    if (!state.active || routeKey() !== state.articleKey) throw new Error('文章已切换，请重新打开引用。');
+    const panel = state.ui.citation;
+    const value = name => panel.querySelector(`[name="${name}"]`).value;
+    return {
+      title: value('title'), author: value('author'), url: value('url'),
+      key: value('key'), published: value('published'), accessed: value('accessed'),
+      authorLiteral: panel.querySelector('[name="authorLiteral"]').checked
+    };
+  }
+
+  function citationStatus(message) {
+    const status = state.ui?.citation.querySelector('.zr-cite-status');
+    if (status && status.textContent !== message) status.textContent = message;
+  }
+
+  function refreshCitationPreview() {
+    const panel = state.ui.citation, preview = panel.querySelector('[name="preview"]');
+    try {
+      const data = citationForm();
+      preview.value = Citation.buildBibTeX(data, panel.querySelector('[name="format"]').value);
+      panel.querySelector('[data-zr-cite-action="copy"]').disabled = false;
+      panel.querySelector('[data-zr-cite-action="download"]').disabled = false;
+      panel.querySelector('[data-zr-cite-action="excerpt"]').disabled = !panel.querySelector('[name="excerpt"]').value.trim();
+      const hints = [];
+      if (!data.author.trim()) hints.push('未找到作者，导出时将省略作者字段，可手动补充。');
+      if (!data.published.trim()) hints.push('未注明发布日期，导出时将省略，编辑日期不会代替发布日期。');
+      if (panel.querySelector('[name="format"]').value === 'misc') hints.push('传统 BibTeX 的链接显示需要 LaTeX 项目加载 url 或 hyperref。');
+      citationStatus(hints.join(' ') || '请核对署名与日期。修改仅用于本次导出。');
+    } catch (error) {
+      preview.value = '';
+      for (const action of ['copy', 'download', 'excerpt']) panel.querySelector(`[data-zr-cite-action="${action}"]`).disabled = true;
+      citationStatus(error.message);
+    }
+  }
+
+  function positionCitation() {
+    if (!state.ui || !state.citationOpen) return;
+    const top = Math.ceil(state.ui.toolbar.getBoundingClientRect().bottom + 12);
+    state.ui.citation.style.top = top + 'px';
+    state.ui.citation.style.maxHeight = `calc(100vh - ${top + 16}px)`;
+  }
+
+  function closeCitation(restoreFocus = true) {
+    if (!state.ui || !state.citationOpen) return;
+    state.citationOpen = false; state.citationEpoch++; state.ui.citation.hidden = true;
+    state.ui.toolbar.querySelector('[data-zr-act="cite"]').setAttribute('aria-expanded', 'false');
+    const focus = state.citationFocus; state.citationFocus = null;
+    // Excerpts and edited metadata are temporary, never stored in GM storage.
+    for (const input of state.ui.citation.querySelectorAll('input:not([type="checkbox"]),textarea')) input.value = '';
+    state.ui.citation.querySelector('.zr-cite-manual').hidden = true;
+    if (restoreFocus) {
+      const target = focus?.isConnected && focus.getClientRects().length && focus.matches('button,a[href],input,select,textarea,[tabindex]')
+        ? focus : state.ui.toolbar.querySelector('.zr-toolbar__handle');
+      target.focus({ preventScroll: true });
+    }
+  }
+
+  function toggleCitation(excerpt = '') {
+    if (state.citationOpen) { closeCitation(); return; }
+    if (!state.ui || !state.article || routeKey() !== state.articleKey) return;
+    const panel = state.ui.citation;
+    let data;
+    try { data = Citation.readCitationMetadata(document, state.article, routeKey()); }
+    catch (error) { showStatus(error.message); return; }
+    for (const name of ['title', 'author', 'published', 'accessed', 'url', 'key']) panel.querySelector(`[name="${name}"]`).value = data[name];
+    panel.querySelector('[name="authorLiteral"]').checked = true;
+    panel.querySelector('[name="format"]').value = 'online';
+    panel.querySelector('[name="excerpt"]').value = excerpt;
+    panel.querySelector('.zr-cite-excerpt').open = Boolean(excerpt);
+    panel.querySelector('.zr-cite-modified').textContent = data.modified ? '页面编辑日期：' + data.modified + '（不会作为发布日期）' : '';
+    state.citationFocus = document.activeElement;
+    toggleTOC(false); state.citationOpen = true; state.citationEpoch++; panel.hidden = false;
+    state.ui.toolbar.querySelector('[data-zr-act="cite"]').setAttribute('aria-expanded', 'true');
+    refreshCitationPreview(); positionCitation();
+    panel.querySelector('[data-zr-cite-action="close"]').focus({ preventScroll: true });
+  }
+
+  async function copyCitationText(text) {
+    const panel = state.ui.citation, epoch = state.citationEpoch;
+    panel.querySelector('.zr-cite-manual').hidden = true;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      if (panel.isConnected && !panel.hidden && state.citationEpoch === epoch) citationStatus('已复制。');
+    } catch (_) {
+      if (!panel.isConnected || panel.hidden || state.citationEpoch !== epoch) return;
+      const manual = panel.querySelector('.zr-cite-manual'); manual.hidden = false;
+      const input = manual.querySelector('textarea'); input.value = text;
+      input.focus({ preventScroll: true }); input.select();
+      citationStatus('浏览器未允许自动复制，内容已选中，请按 ' + (/Mac/.test(navigator.platform) ? '⌘C' : 'Ctrl+C') + ' 手动复制。');
+    }
+  }
+
+  function buildCitationPanel() {
+    const panel = document.createElement('aside'); panel.id = 'zr-citation'; panel.hidden = true;
+    panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'false'); panel.setAttribute('aria-label', '引用与摘录');
+    panel.innerHTML = `<div class="zr-cite-header"><strong>引用与摘录</strong><button type="button" data-zr-cite-action="close" aria-label="关闭引用">关闭</button></div>
+      <div class="zr-cite-body">
+      <label>文章标题<input name="title" type="text"></label>
+      <label>作者／页面署名<input name="author" type="text" placeholder="未注明时可留空"></label>
+      <label class="zr-cite-checkbox"><input name="authorLiteral" type="checkbox" checked>按机构或账号署名原样保留</label>
+      <div class="zr-cite-grid"><label>发布日期<input name="published" type="date"></label><label>访问日期<input name="accessed" type="date"></label></div>
+      <p class="zr-cite-modified"></p>
+      <label>来源链接<input name="url" type="url" spellcheck="false"></label>
+      <div class="zr-cite-grid"><label>引用键<input name="key" type="text" spellcheck="false"></label><label>导出格式<select name="format"><option value="online">BibLaTeX · @online</option><option value="misc">传统 BibTeX · @misc</option></select></label></div>
+      <label>BibTeX 预览<textarea name="preview" rows="6" wrap="off" readonly spellcheck="false"></textarea></label>
+      <div class="zr-cite-actions"><button type="button" data-zr-cite-action="copy">复制 BibTeX</button><button type="button" data-zr-cite-action="download">下载 .bib</button></div>
+      <details class="zr-cite-excerpt"><summary>摘录带出处</summary><label>原文摘录<textarea name="excerpt" rows="3" placeholder="先选中正文再打开引用，或在此粘贴原文"></textarea></label><button type="button" data-zr-cite-action="excerpt">复制摘录与出处</button></details>
+      <div class="zr-cite-manual" hidden><label>手动复制内容<textarea rows="4" readonly spellcheck="false"></textarea></label></div>
+      <p class="zr-cite-status" role="status"></p>
+      </div>`;
+    panel.addEventListener('input', refreshCitationPreview);
+    panel.addEventListener('change', refreshCitationPreview);
+    panel.addEventListener('click', event => {
+      const action = event.target.closest('[data-zr-cite-action]')?.dataset.zrCiteAction;
+      if (!action) return;
+      if (action === 'close') { closeCitation(); return; }
+      try {
+        const data = citationForm();
+        if (action === 'excerpt') { copyCitationText(Citation.buildExcerpt(data, panel.querySelector('[name="excerpt"]').value)); return; }
+        const bib = Citation.buildBibTeX(data, panel.querySelector('[name="format"]').value);
+        if (action === 'copy') { copyCitationText(bib); return; }
+        if (action === 'download') {
+          const url = URL.createObjectURL(new Blob([bib], { type: 'application/x-bibtex;charset=utf-8' }));
+          const link = document.createElement('a'); link.href = url; link.download = data.key.trim() + '.bib';
+          panel.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+          citationStatus('已请求下载 .bib 文件。');
+        }
+      } catch (error) { citationStatus(error.message); }
+    });
+    return panel;
+  }
+
   const TOOLBAR_HTML = `
     <button class="zr-btn zr-toolbar__handle" type="button" data-zr-act="settings" title="阅读设置 · 悬停或点击展开" aria-label="阅读设置" aria-controls="zr-controls" aria-expanded="false">${ICONS.book}</button>
     <div class="zr-toolbar__controls" id="zr-controls" hidden>
@@ -603,6 +749,7 @@
     </select>
     <button class="zr-btn zr-btn--icon" type="button" data-zr-act="fullscreen" title="浏览器全屏（F）" aria-label="浏览器全屏">${ICONS.fullscreen}</button>
     <button class="zr-btn zr-btn--text" type="button" data-zr-act="toc" aria-label="文章目录" aria-expanded="false" aria-controls="zr-toc">目录</button>
+    <button class="zr-btn zr-btn--text" type="button" data-zr-act="cite" aria-label="引用与摘录" aria-expanded="false" aria-controls="zr-citation">引用</button>
     <button class="zr-btn zr-btn--text" type="button" data-zr-act="comments" aria-label="查看或收起评论" aria-pressed="false">评论</button>
     <button class="zr-btn zr-btn--text" type="button" data-zr-act="start" aria-label="从头阅读">从头</button>
     <label class="zr-image-dim-label" title="仅在深色主题下柔化正文图片；放大查看保持原色"><input id="zr-image-dim" type="checkbox">柔化图片</label>
@@ -633,7 +780,8 @@
     toc.setAttribute('aria-label', '文章目录');
     toc.innerHTML = '<div class="zr-toc-header"><strong>文章目录</strong><button type="button" aria-label="关闭目录">关闭</button></div><p class="zr-toc-empty">正文暂无章节标题</p><div class="zr-toc-list"></div>';
     toc.querySelector('button').addEventListener('click', () => toggleTOC(false));
-    document.body.append(toolbar, progress, toc);
+    const citation = buildCitationPanel();
+    document.body.append(toolbar, progress, toc, citation);
 
     const handle = toolbar.querySelector('[data-zr-act="settings"]');
     const controls = toolbar.querySelector('#zr-controls');
@@ -643,6 +791,7 @@
       handle.setAttribute('aria-expanded', String(open));
       toolbar.classList.toggle('zr-toolbar--expanded', open);
       positionTOC();
+      positionCitation();
     };
     toolbar.addEventListener('pointerenter', () => expand(true));
     toolbar.addEventListener('pointerleave', () => {
@@ -658,6 +807,10 @@
       settings.imageDim = event.target.checked; applySettings(); saveSettings();
     });
 
+    let capturedExcerpt = '';
+    toolbar.addEventListener('pointerdown', event => {
+      if (event.button === 0 && event.target.closest('[data-zr-act="cite"]')) capturedExcerpt = selectedArticleText();
+    });
     toolbar.addEventListener('click', (event) => {
       const btn = event.target.closest('[data-zr-act]');
       if (!btn) return;
@@ -671,12 +824,13 @@
       else if (act === 'width') toggleWidth();
       else if (act === 'fullscreen') toggleFullscreen();
       else if (act === 'toc') toggleTOC();
+      else if (act === 'cite') { toggleCitation(event.detail ? capturedExcerpt : selectedArticleText()); capturedExcerpt = ''; }
       else if (act === 'comments') toggleComments();
       else if (act === 'start') readFromStart();
       else if (act === 'exit') exitReader();
     });
 
-    state.ui = { toolbar, progress, fill, toc, progressText: toolbar.querySelector('#zr-progress-text') };
+    state.ui = { toolbar, progress, fill, toc, citation, progressText: toolbar.querySelector('#zr-progress-text') };
     refreshTOC();
   }
 
@@ -685,6 +839,7 @@
     state.ui.toolbar.remove();
     state.ui.progress.remove();
     state.ui.toc.remove();
+    state.ui.citation.remove(); state.citationOpen = false; state.citationFocus = null;
     state.headings = []; state.tocOpen = false;
     state.ui = null;
   }
@@ -733,6 +888,7 @@
   function updateProgress() {
     if (!state.active || !state.ui || !state.ui.progress) return;
     positionTOC();
+    positionCitation();
     const ratio = articleProgress();
     const percent = Math.round(ratio * 100);
     state.ui.fill.style.transform = `scaleX(${ratio.toFixed(4)})`;
@@ -768,11 +924,13 @@
     if (!state.active) return;
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target;
-    if (target?.closest?.(DIALOGS) && !target.closest('#zr-image-viewer')) return;
+    if (target?.closest?.(DIALOGS) && !target.closest('#zr-image-viewer, #zr-citation')) return;
     if (state.viewer && event.key !== 'Escape') return;
+    if (state.citationOpen && event.key !== 'Escape' && target?.closest?.('#zr-citation')) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       if (state.viewer) { closeImageViewer(); return; }
+      if (state.citationOpen) { closeCitation(); return; }
       if (state.tocOpen) { toggleTOC(false); return; }
       if (state.comments.length) { toggleComments(); return; }
       exitReader();
@@ -874,7 +1032,7 @@
 
   function exitReader({ suppressAuto = true, preservePosition = true } = {}) {
     if (!state.active) return;
-    saveReadingPosition(); stopResumeTracking(); closeImageViewer();
+    saveReadingPosition(); stopResumeTracking(); closeImageViewer(); closeCitation(false);
     const position = preservePosition ? captureReadingPosition() : null;
     state.active = false;
     state.autoSuppressed = suppressAuto;
@@ -942,7 +1100,7 @@
       const relevant = records.some(({ target, type, attributeName }) => {
         const el = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
         if (type === 'attributes' && attributeName === 'style' && el?.hasAttribute('data-zr-hidden')) return false;
-        return !el?.closest('#zr-toolbar, #zr-progress, #zr-launcher, #zr-toc, #zr-image-viewer, #zr-status');
+        return !el?.closest('#zr-toolbar, #zr-progress, #zr-launcher, #zr-toc, #zr-citation, #zr-image-viewer, #zr-status');
       });
       if (!relevant || pending !== null) return;
       // Throttle rather than debounce: continuous page updates cannot starve entry.

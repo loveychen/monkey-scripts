@@ -6,7 +6,7 @@
 
 | 脚本 | 作用范围与功能 | 安装 | 源码与说明 |
 | --- | --- | --- | --- |
-| 知乎专栏 · 沉浸阅读 | 知乎专栏文章；主题、阅读宽度、断点续读、目录与图片查看 | [Greasy Fork](https://greasyfork.org/zh-CN/scripts/603576) | [scripts/zhihu-column-reader](scripts/zhihu-column-reader/) |
+| 知乎专栏 · 沉浸阅读 | 知乎专栏文章；主题、阅读宽度、断点续读、目录、图片、BibTeX 与摘录出处 | [Greasy Fork](https://greasyfork.org/zh-CN/scripts/603576) | [scripts/zhihu-column-reader](scripts/zhihu-column-reader/) |
 
 建议从 Greasy Fork 安装，各脚本的安装要求和使用方法见对应目录。仓库中的 `.user.js` 是完整安装文件，`.meta.js` 仅包含元信息。
 
@@ -17,11 +17,12 @@
 ```bash
 npm run build
 npm run check
+npm test
 ```
 
 只操作知乎脚本时使用 `npm run build:zhihu` 和 `npm run check:zhihu`。
 
-构建命令生成完整脚本和元信息文件；检查命令验证 JavaScript 语法。页面交互需要另在浏览器中验证，语法检查不能代替实际阅读体验验收。
+构建命令生成完整脚本和元信息文件；检查命令验证 JavaScript 语法，测试命令检查引用格式和边界规则。页面交互需要另在浏览器中验证，语法检查不能代替实际阅读体验验收。
 
 ## 目录约定
 

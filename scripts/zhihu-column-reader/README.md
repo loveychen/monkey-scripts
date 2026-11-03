@@ -2,6 +2,17 @@
 
 保留知乎专栏的文章标题、作者和正文，隐藏导航、侧栏与推荐，提供低打扰的阅读设置。
 
+## 1.5.0：引用与摘录
+
+展开阅读设置，点击“引用”打开面板。面板默认隐藏，选择正文不会自动弹窗。
+
+- 预览并编辑标题、署名、发布日期、访问日期、来源链接和引用键。机构或账号署名默认按字面保留；需要让 BibTeX 按人名解析时取消勾选，并按所用工具的作者格式填写。
+- 选择 BibLaTeX 的 `@online` 或传统 BibTeX 的 `@misc`，复制预览或下载 `.bib`。传统格式的链接显示需要 LaTeX 项目加载 `url` 或 `hyperref`；最终参考文献样式由论文模板决定。
+- 作者和发布日期缺失时留空，不猜测；编辑日期单独提示，不会代替发布日期。明确显示的页面日期优先，带时区的元信息按知乎的上海日期转换。
+- 先选择正文文字，再打开“引用”，即可复制保留换行的 Markdown 摘录、署名、标题、来源和日期。也可在“摘录带出处”区域粘贴原文；正文外的选区不会自动采集。
+- 复制被浏览器拒绝时，面板会选中待复制内容，按 ⌘C / Ctrl+C 手动复制。不会将失败显示为成功。
+- Esc 先关闭引用面板，再按才退出阅读。关闭面板、退出或换文会清理临时字段与摘录；不写入本地记录，不新增 GM 权限或额外联网。
+
 ## 1.4.0：阅读百分比
 
 展开右上角阅读设置即可看到“已读 XX%”，随正文位置更新，与顶部进度条保持一致。工具栏折叠时不额外显示；通过 Tampermonkey 菜单关闭阅读进度时，两者一起隐藏。已有偏好继续保留，无新增权限。
@@ -30,7 +41,7 @@
 | 快捷键 | 功能 |
 | --- | --- |
 | macOS ⌥R / 其他系统 Alt+R | 进入或退出阅读 |
-| Esc | 依次关闭图片、目录或评论，再退出阅读；浏览器可能先退出全屏 |
+| Esc | 依次关闭图片、引用、目录或评论，再退出阅读；浏览器可能先退出全屏 |
 | T | 循环切换主题 |
 | W | 循环切换宽度 |
 | ＋ / − | 调节字号 |
@@ -51,6 +62,7 @@ Tampermonkey 菜单提供自动进入开关、进度显示开关、清除本地�
 ```bash
 npm run build:zhihu
 npm run check:zhihu
+npm run test:zhihu
 ```
 
 也可在当前目录运行 `node build-userscript.mjs`。修改 `src/content.js` 与 `src/reader.css` 后重新构建；版本统一在 `release.json` 中修改。完整脚本、元信息、源码与版本配置一起提交。
@@ -58,5 +70,7 @@ npm run check:zhihu
 Greasy Fork 同步 [zhihu-column-reader.user.js](zhihu-column-reader.user.js)，不直接同步源码。现有 `@namespace` 和 Greasy Fork 更新地址保持不变。[仓库发布说明](../../docs/publishing.md)列出了准确同步地址。
 
 仓库首次导入版本为 1.3.0；后续版本与改动见 `release/changes-*.txt`。构建与语法检查不等于真实知乎和 Tampermonkey 安装验收。
+
+引用规则位于 `src/citation.mjs`，由构建器内嵌到完整脚本。`test/citation.test.mjs` 使用 Node 内置测试，无额外依赖。浏览器输入夹具通过 `node scripts/zhihu-column-reader/test/citation-server.mjs` 从仓库根目录启动；控制菜单提供选区与换文输入，`?mode=missing`、`?mode=structured`、`?mode=zhihu-meta`、`?mode=utc-boundary` 和 `?clipboard=deny` 提供明确的控制条件，`/responsive` 验证 390px iframe 布局。GM 接口和失败分支由夹具适配，实际脚本逻辑来自生成文件。验证范围与限制见 [1.5.0 验证记录](release/verification-1.5.0.md)。
 
 许可：[MIT](LICENSE)。反馈请使用 [Greasy Fork 反馈页](https://greasyfork.org/zh-CN/scripts/603576/feedback)，提供版本、文章地址、复现步骤和实际现象。

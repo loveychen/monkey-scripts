@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  {{METADATA}}
+</head>
+<body>
+  <div id="root"><article class="Post-Main">
+    {{ROOTMETA}}
+    <header class="Post-Header"><h1 class="Post-Title">{{TITLE}}</h1>{{AUTHOR}}</header>
+    <div class="Post-RichTextContainer"><div class="RichText Post-RichText">
+      <h2>引用与摘录验证</h2>
+      <p id="fixture-quote">这里是第一段摘录：<em>A&amp;B、50% 与中文</em>。<br>第二行原文保留换行。</p>
+      <p>本页使用完整生成脚本。文章和元信息均为合成输入，GM 接口是本地适配层，不代表实际 Tampermonkey 安装。</p>
+      {{PARAGRAPHS}}
+    </div></div>
+    <div class="ContentItem-time">{{TIME}}</div>
+  </article></div>
+  <aside id="fixture-controls" style="position:fixed;bottom:8px;left:8px;width:360px;max-width:calc(100vw - 16px);z-index:2147483647;background:#fff;color:#222;padding:8px;border:1px solid #ccc;font:12px system-ui">
+    <details><summary>本地验证输入</summary><p id="fixture-outside">正文之外的测试文字。</p>
+      <button id="fixture-select">选择正文摘录</button><button id="fixture-external">选择正文外文字</button><button id="fixture-clear">清除选区</button><button id="fixture-route">换到第二篇</button>
+      <div id="fixture-menus"></div>
+    </details>
+  </aside>
+  <script src="/fixture.js"></script>
+  <script src="/reader.js"></script>
+</body>
+</html>

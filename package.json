@@ -9,6 +9,8 @@
     "build": "npm run build:zhihu",
     "build:zhihu": "node scripts/zhihu-column-reader/build-userscript.mjs",
     "check": "npm run check:zhihu",
-    "check:zhihu": "node --check scripts/zhihu-column-reader/build-userscript.mjs && node --check scripts/zhihu-column-reader/src/content.js && node --check scripts/zhihu-column-reader/zhihu-column-reader.user.js && node --check scripts/zhihu-column-reader/zhihu-column-reader.meta.js"
+    "check:zhihu": "node --check scripts/zhihu-column-reader/build-userscript.mjs && node --check scripts/zhihu-column-reader/src/content.js && node --check scripts/zhihu-column-reader/src/citation.mjs && node --check scripts/zhihu-column-reader/zhihu-column-reader.user.js && node --check scripts/zhihu-column-reader/zhihu-column-reader.meta.js",
+    "test": "npm run test:zhihu",
+    "test:zhihu": "node --test scripts/zhihu-column-reader/test/citation.test.mjs"
   }
 }

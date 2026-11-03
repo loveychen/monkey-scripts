@@ -8,10 +8,12 @@ for (const key of ['homepage', 'support', 'download']) {
 if (!/^\d+\.\d+\.\d+$/.test(release.version)) throw new Error('Invalid release version');
 let source = readFileSync(new URL('src/content.js', base), 'utf8');
 const css = readFileSync(new URL('src/reader.css', base), 'utf8');
+const citation = readFileSync(new URL('src/citation.mjs', base), 'utf8').replace(/^export /gm, '');
 function replaceOnce(pattern, replacement) {
   if (!pattern.test(source)) throw new Error(`Missing build marker: ${pattern}`);
-  source = source.replace(pattern, replacement);
+  source = source.replace(pattern, () => replacement);
 }
+replaceOnce(/  \/\/ Citation helpers are embedded here by build-userscript\.mjs\./, `  const Citation = (() => {\n${citation}\nreturn { readCitationMetadata, buildBibTeX, buildExcerpt };\n})();`);
 replaceOnce(/  const STORE = \(\(\) => \{[\s\S]*?\n  \}\)\(\);/, `  const STORE = {
     async get(key) { return { [key]: await GM_getValue(key, null) }; },
     async set(values) {
@@ -59,7 +61,7 @@ const metadata = `// ==UserScript==
 // @name         知乎专栏 · 沉浸阅读
 // @namespace    local.zhihu-column-reader
 // @version      ${release.version}
-// @description  自动净化知乎专栏，支持系统主题、断点续读、目录、图片放大、正文进度百分比、评论和手动全屏。
+// @description  知乎专栏沉浸阅读，支持系统主题、目录、图片放大、断点续读、引用预览、BibTeX 导出和摘录带出处。
 // @homepageURL  ${release.homepage}
 // @supportURL   ${release.support}
 // @updateURL    ${release.download}
