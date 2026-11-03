@@ -117,6 +117,7 @@ html[data-zr-active="on"] .ContentItem-time { color: var(--zr-muted) !important;
 #zr-toolbar .zr-toolbar__handle { order: 1; flex-shrink: 0; }
 #zr-toolbar .zr-toolbar__controls { display: flex; align-items: center; gap: 3px; }
 #zr-toolbar .zr-toolbar__controls[hidden] { display: none !important; }
+#zr-toolbar .zr-progress-text { padding: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--zr-muted); }
 #zr-toolbar svg { width: 18px; height: 18px; display: block; }
 #zr-toolbar .zr-toolbar__sep { height: 18px; width: 1px; background: var(--zr-rule); margin: 0 5px; }
 #zr-toolbar .zr-btn {

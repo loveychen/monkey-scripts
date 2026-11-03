@@ -514,6 +514,7 @@
     HTML.setAttribute('data-zr-image-dim', settings.imageDim ? 'on' : 'off');
     if (state.ui && state.ui.progress) {
       state.ui.progress.hidden = !settings.progress;
+      state.ui.progressText.hidden = !settings.progress;
     }
     if (state.ui) {
       state.ui.toolbar.querySelector('#zr-theme').value = settings.theme;
@@ -587,6 +588,7 @@
   const TOOLBAR_HTML = `
     <button class="zr-btn zr-toolbar__handle" type="button" data-zr-act="settings" title="阅读设置 · 悬停或点击展开" aria-label="阅读设置" aria-controls="zr-controls" aria-expanded="false">${ICONS.book}</button>
     <div class="zr-toolbar__controls" id="zr-controls" hidden>
+    <span id="zr-progress-text" class="zr-progress-text" title="按正文范围计算的阅读进度" hidden>已读 0%</span>
     <button class="zr-btn" type="button" data-zr-act="font-dec" title="减小字号（-）" aria-label="减小字号"><span class="zr-btn__aa">A<sup>−</sup></span></button>
     <button class="zr-btn" type="button" data-zr-act="font-inc" title="增大字号（+）" aria-label="增大字号"><span class="zr-btn__aa">A<sup>+</sup></span></button>
     <select id="zr-theme" class="zr-theme-select" aria-label="阅读主题" title="阅读主题（T 可循环切换）">
@@ -674,7 +676,7 @@
       else if (act === 'exit') exitReader();
     });
 
-    state.ui = { toolbar, progress, fill, toc };
+    state.ui = { toolbar, progress, fill, toc, progressText: toolbar.querySelector('#zr-progress-text') };
     refreshTOC();
   }
 
@@ -732,9 +734,11 @@
     if (!state.active || !state.ui || !state.ui.progress) return;
     positionTOC();
     const ratio = articleProgress();
+    const percent = Math.round(ratio * 100);
     state.ui.fill.style.transform = `scaleX(${ratio.toFixed(4)})`;
-    state.ui.progress.setAttribute('aria-valuenow', String(Math.round(ratio * 100)));
-    state.ui.progress.title = '正文阅读进度 ' + Math.round(ratio * 100) + '%';
+    state.ui.progress.setAttribute('aria-valuenow', String(percent));
+    state.ui.progress.title = '正文阅读进度 ' + percent + '%';
+    state.ui.progressText.textContent = '已读 ' + percent + '%';
     let current = state.headings[0];
     for (const item of state.headings) { if (item.el.getBoundingClientRect().top <= 96) current = item; }
     for (const item of state.headings) {

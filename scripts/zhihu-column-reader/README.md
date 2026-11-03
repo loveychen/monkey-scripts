@@ -2,6 +2,10 @@
 
 保留知乎专栏的文章标题、作者和正文，隐藏导航、侧栏与推荐，提供低打扰的阅读设置。
 
+## 1.4.0：阅读百分比
+
+展开右上角阅读设置即可看到“已读 XX%”，随正文位置更新，与顶部进度条保持一致。工具栏折叠时不额外显示；通过 Tampermonkey 菜单关闭阅读进度时，两者一起隐藏。已有偏好继续保留，无新增权限。
+
 ## 安装
 
 1. 安装 Tampermonkey。Chrome 如有“允许用户脚本”选项，请确认已经开启；具体要求见 [Tampermonkey 官方说明](https://www.tampermonkey.net/faq.php?locale=en&q=Q209)。
@@ -53,6 +57,6 @@ npm run check:zhihu
 
 Greasy Fork 同步 [zhihu-column-reader.user.js](zhihu-column-reader.user.js)，不直接同步源码。现有 `@namespace` 和 Greasy Fork 更新地址保持不变。[仓库发布说明](../../docs/publishing.md)列出了准确同步地址。
 
-本次迁移保留 1.3.0 的源码和生成文件，未增加阅读功能。构建与语法检查不等于真实知乎和 Tampermonkey 安装验收。
+仓库首次导入版本为 1.3.0；后续版本与改动见 `release/changes-*.txt`。构建与语法检查不等于真实知乎和 Tampermonkey 安装验收。
 
 许可：[MIT](LICENSE)。反馈请使用 [Greasy Fork 反馈页](https://greasyfork.org/zh-CN/scripts/603576/feedback)，提供版本、文章地址、复现步骤和实际现象。
