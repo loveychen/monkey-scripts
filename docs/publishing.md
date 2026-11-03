@@ -2,6 +2,8 @@
 
 本仓库是脚本集合，每份脚本独立版本、独立 Greasy Fork 条目、独立同步地址。开发分支用于未完成修改，`main` 用于已经验证的版本。
 
+2026-11-03 已为本仓库配置 GitHub push Webhook（application/json、Active、SSL 校验开启）。配置与实测状态见 [同步记录](webhook-sync-status.md)。新增脚本仍需在对应 Greasy Fork 条目绑定自己的完整脚本 Raw 链接，不要重复创建同一仓库的相同钩子。
+
 ## 知乎专栏 · 沉浸阅读
 
 - 现有条目：https://greasyfork.org/zh-CN/scripts/603576

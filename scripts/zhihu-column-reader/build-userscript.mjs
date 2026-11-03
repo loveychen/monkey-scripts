@@ -59,7 +59,7 @@ const metadata = `// ==UserScript==
 // @name         知乎专栏 · 沉浸阅读
 // @namespace    local.zhihu-column-reader
 // @version      ${release.version}
-// @description  自动净化知乎专栏，支持系统主题、断点续读、目录、图片放大、评论和手动全屏。
+// @description  自动净化知乎专栏，支持系统主题、断点续读、目录、图片放大、正文进度百分比、评论和手动全屏。
 // @homepageURL  ${release.homepage}
 // @supportURL   ${release.support}
 // @updateURL    ${release.download}

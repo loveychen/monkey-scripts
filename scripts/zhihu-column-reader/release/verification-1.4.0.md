@@ -15,6 +15,6 @@
 
 ## 同步验收
 
-本轮只向 GitHub 提交 1.4.0，不手动触发 Greasy Fork 同步，也不调整其同步方式。
+1.4.0 的首次功能提交没有手动触发 Greasy Fork 同步。后续用户另行授权配置 Webhook，配置及实测结果见 [同步记录](../../../docs/webhook-sync-status.md)。
 
 用户可检查 Greasy Fork 是否自动出现 1.4.0，再让 Tampermonkey 检查更新并刷新文章，展开阅读设置确认“已读 XX%”出现且随滚动变化。GitHub 提交、Greasy Fork 同步、浏览器安装分别判断；本地验证不能证明同步成功。
