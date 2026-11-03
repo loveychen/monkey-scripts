@@ -25,3 +25,5 @@
 - 浏览器证据来自内置浏览器、本地输入夹具和真实站点 DOM 回读，不等于在真实知乎页面安装 1.5.0 后的完整交互验收。当前 Chrome 工具连接不可用，未操作用户的扩展管理页或安装状态。
 - 本机没有 TeX/Biber 消费程序。格式和转义测试、实际文件下载不能代替所有论文模板的排版检查；传统格式的链接需要 url/hyperref 支持。
 - GitHub 推送、Greasy Fork 回读及客户端安装分别判断；发布结果在任务记录与交付回复中列明，不以本地测试代替同步。
+
+发布回读：提交 [ff0a57c](https://github.com/loveychen/monkey-scripts/commit/ff0a57c82eeded99adac0ea0d2d05495cbb1be74) 已推送到 main；Greasy Fork 从推送前的 1.4.0 更新为 1.5.0，实际代码含新面板、BibTeX 和摘录函数。本轮没有手动触发同步；未再次读取本次 Webhook 的 HTTP 投递详情。完整 user.js SHA-256 为 `0a8546055cf9045a2363c0bdfb8f2073acde7300ce04e649b166f6ee36280984`，GitHub 提交树已与本地一致性核对。
