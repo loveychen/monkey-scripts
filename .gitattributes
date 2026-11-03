@@ -1,0 +1,4 @@
+# Keep generated installation files out of source-focused GitHub diffs.
+scripts/*/*.user.js linguist-generated=true
+# Metadata deliberately ends with a blank separator, shared with the user.js header.
+scripts/*/*.meta.js linguist-generated=true whitespace=-blank-at-eof

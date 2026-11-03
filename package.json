@@ -1,0 +1,14 @@
+{
+  "name": "monkey-scripts",
+  "private": true,
+  "description": "A collection of independently maintained browser userscripts",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build:zhihu",
+    "build:zhihu": "node scripts/zhihu-column-reader/build-userscript.mjs",
+    "check": "npm run check:zhihu",
+    "check:zhihu": "node --check scripts/zhihu-column-reader/build-userscript.mjs && node --check scripts/zhihu-column-reader/src/content.js && node --check scripts/zhihu-column-reader/zhihu-column-reader.user.js && node --check scripts/zhihu-column-reader/zhihu-column-reader.meta.js"
+  }
+}
