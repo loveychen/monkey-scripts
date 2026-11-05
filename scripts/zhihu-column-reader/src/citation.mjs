@@ -13,15 +13,15 @@ export function citationDate(value) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function citationMetadataDate(value) {
+export function citationMetadataDate(value, timeZone = 'Asia/Shanghai') {
   const text = String(value ?? '').trim(), calendar = citationDate(text);
   if (!calendar) return '';
   if (text.includes('T') && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(text)) return '';
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(text)) {
     const instant = new Date(text);
     if (!Number.isFinite(instant.getTime())) return '';
-    // Zhihu timestamps use UTC in metadata; its publication calendar is China time.
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(instant).map(part => [part.type, part.value]));
+    // Zhihu uses its China publication calendar; other adapters supply their display timezone.
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(instant).map(part => [part.type, part.value]));
     return `${parts.year}-${parts.month}-${parts.day}`;
   }
   return calendar;
@@ -36,11 +36,20 @@ export function citationURL(value) {
   if (url.hostname === 'zhuanlan.zhihu.com' && /^\/p\/\d+\/?$/.test(url.pathname)) {
     url.search = ''; url.hash = ''; url.pathname = url.pathname.replace(/\/$/, '');
   }
+  if (/^(?:www\.)?(?:x|twitter)\.com$/.test(url.hostname) && /^\/[A-Za-z0-9_]{1,15}\/article\/\d+\/?$/.test(url.pathname)) {
+    url.hostname = 'x.com'; url.protocol = 'https:'; url.port = '';
+    url.pathname = url.pathname.toLowerCase().replace(/\/$/, ''); url.search = ''; url.hash = '';
+  }
   return url.href.replace(/[{}]/g, char => encodeURIComponent(char));
 }
 
+export function canonicalArticleURL(value) { return citationURL(value); }
+
 export function citationKey(url) {
-  const id = new URL(citationURL(url)).pathname.match(/^\/p\/(\d+)\/?$/)?.[1];
+  const parsed = new URL(citationURL(url));
+  const xId = parsed.hostname === 'x.com' && parsed.pathname.match(/^\/[^/]+\/article\/(\d+)$/)?.[1];
+  if (xId) return 'x' + xId;
+  const id = parsed.pathname.match(/^\/p\/(\d+)\/?$/)?.[1];
   if (id) return 'zhihu' + id;
   let hash = 2166136261;
   for (const char of url) hash = Math.imul(hash ^ char.codePointAt(0), 16777619);
@@ -104,9 +113,16 @@ export function buildExcerpt(raw, text) {
 
 export function readCitationMetadata(doc, article, currentURL, now = new Date()) {
   const url = citationURL(currentURL), title = citationLine(article.titleEl.textContent);
+  const zone = article.site === 'x' ? article.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone : 'Asia/Shanghai';
+  const metadataDate = value => citationMetadataDate(value, zone);
+  const xIdentity = value => {
+    const item = new URL(value);
+    return /^(?:www\.)?(?:x|twitter)\.com$/.test(item.hostname) ? item.pathname.match(/^\/[^/]+\/(?:article|status)\/(\d+)\/?$/)?.[1] : null;
+  };
   const sameArticle = value => {
     try {
       const candidate = citationURL(new URL(value, currentURL).href);
+      if (xIdentity(url) && xIdentity(candidate)) return xIdentity(url) === xIdentity(candidate);
       return new URL(candidate).pathname.replace(/\/$/, '') === new URL(url).pathname.replace(/\/$/, '') && new URL(candidate).origin === new URL(url).origin;
     } catch (_) { return false; }
   };
@@ -134,16 +150,18 @@ export function readCitationMetadata(doc, article, currentURL, now = new Date())
   }
   const authorElement = article.rootEl.querySelector('.Post-Author .AuthorInfo-name, .Post-Author [itemprop="name"], .Post-Author a[href*="/people/"], .Post-Author a[href*="/org/"]');
   const structuredAuthors = structured?.author ? (Array.isArray(structured.author) ? structured.author : [structured.author]) : [];
-  const author = citationLine(authorElement?.textContent) || structuredAuthors.map(item => citationLine(typeof item === 'string' ? item : item?.name)).filter(Boolean).join(' and ') || (headMatches ? citationLine(headMeta('author')) : '');
+  const directAuthor = article.site === 'x' ? citationLine(article.authorName || article.authorEl?.textContent) : citationLine(authorElement?.textContent);
+  const headAuthor = headMatches ? citationLine(headMeta('author')) : '';
+  const author = directAuthor || structuredAuthors.map(item => citationLine(typeof item === 'string' ? item : item?.name)).filter(Boolean).join(' and ') || (/^https?:\/\//i.test(headAuthor) ? '' : headAuthor);
   const elementDate = name => {
-    const el = article.rootEl.querySelector(`[itemprop~="${name}"]`);
-    return el ? citationMetadataDate(el.getAttribute('datetime') || el.getAttribute('content') || el.textContent) : '';
+    const el = [...article.rootEl.querySelectorAll(`[itemprop~="${name}"]`)].find(node => article.site !== 'x' || !article.richEl.contains(node));
+    return el ? metadataDate(el.getAttribute('datetime') || el.getAttribute('content') || el.textContent) : '';
   };
   const timeElement = article.rootEl.querySelector('.ContentItem-time');
   const timeText = timeElement ? [timeElement.textContent, timeElement.getAttribute('title'), timeElement.getAttribute('aria-label'), timeElement.getAttribute('data-tooltip')].filter(Boolean).join(' ') : '';
   const labeledDate = label => citationDate(timeText.match(new RegExp(`(?:${label})\\s*(\\d{4}(?:-\\d{1,2}-\\d{1,2}|年\\d{1,2}月\\d{1,2}日))`))?.[1]);
-  const published = labeledDate('发布于|发表于') || elementDate('datePublished') || citationMetadataDate(structured?.datePublished) || (headMatches ? citationMetadataDate(headMeta('article:published_time') || headMeta('datePublished')) : '');
-  const modified = labeledDate('编辑于|更新于') || elementDate('dateModified') || citationMetadataDate(structured?.dateModified) || (headMatches ? citationMetadataDate(headMeta('article:modified_time') || headMeta('dateModified')) : '');
+  const published = (article.site === 'x' ? metadataDate(article.timeEl?.getAttribute('datetime')) : labeledDate('发布于|发表于')) || elementDate('datePublished') || metadataDate(structured?.datePublished) || (headMatches ? metadataDate(headMeta('article:published_time') || headMeta('datePublished')) : '');
+  const modified = (article.site === 'x' ? '' : labeledDate('编辑于|更新于')) || elementDate('dateModified') || metadataDate(structured?.dateModified) || (headMatches ? metadataDate(headMeta('article:modified_time') || headMeta('dateModified')) : '');
   const accessed = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   return { title, author, authorLiteral: true, published, modified, accessed, url, key: citationKey(url) };
 }

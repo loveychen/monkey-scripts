@@ -9,6 +9,7 @@
   'use strict';
 
   // Citation helpers are embedded here by build-userscript.mjs.
+  // Site helpers are embedded here by build-userscript.mjs.
 
   if (window.__ZR_READER_LOADED__) return;
   window.__ZR_READER_LOADED__ = true;
@@ -50,7 +51,7 @@
     article: null,
     hidden: [],
     pathMarked: [],
-    lastRouteKey: location.origin + location.pathname,
+    lastRouteKey: routeKey(),
     ui: null,
     launcher: null,
     raf: 0,
@@ -59,7 +60,7 @@
     userNavigated: false, resumeObserver: null, resumeTimer: null,
     viewer: null, comments: [], commentPath: [], commentReturn: null, articleKey: null,
     headings: [], tocOpen: false, statusTimer: null,
-    citationOpen: false, citationFocus: null, citationEpoch: 0,
+    citationOpen: false, citationFocus: null, citationEpoch: 0, roleMarked: [],
     resumePending: false, resumePendingTimer: null, resumeAttempted: false, routeWait: null, routeSnapshot: null
   };
 
@@ -128,21 +129,10 @@
   /* -------------------------------------------------------------- 正文定位 */
 
   function findArticle() {
-    if (!/^\/p\/[^/]+\/?$/.test(location.pathname)) return null;
-    const titleEl =
-      document.querySelector('article.Post-Main h1.Post-Title') ||
-      document.querySelector('h1.Post-Title');
-    const richEl =
-      document.querySelector('.Post-RichTextContainer .RichText') ||
-      document.querySelector('article.Post-Main .RichText') ||
-      document.querySelector('.RichText.Post-RichText');
-    if (!titleEl || !richEl || !richEl.isConnected) return null;
-    if (richEl.closest('.Post-Editor, .RichText--editable')) return null;
-
-    // Fail safely on unknown markup rather than hiding the title/author as
-    // siblings of an overly narrow rich-text root.
-    const articleEl = richEl.closest('article.Post-Main');
-    if (!articleEl || !articleEl.contains(titleEl)) return null;
+    const article = Sites.findSiteArticle(document, location.href);
+    if (!article) return null;
+    const { titleEl, richEl, rootEl: articleEl } = article;
+    if (!richEl.isConnected || !titleEl.textContent.trim()) return null;
 
     const textLength = (richEl.innerText || '').replace(/\s+/g, '').length;
     if (!textLength && !richEl.querySelector('img, video, pre, svg')) return null;
@@ -151,7 +141,7 @@
     if (waiting?.key === routeKey()) state.routeWait = null;
     if (routeKey() === state.lastRouteKey) rememberRouteArticle({ rootEl: articleEl, richEl });
 
-    return { titleEl, richEl, rootEl: articleEl, textLength };
+    return { ...article, textLength };
   }
 
   function rememberRouteArticle(article) {
@@ -214,6 +204,7 @@
     while (node && node.parentElement && node !== document.body) {
       const parent = node.parentElement;
       for (const sibling of Array.from(parent.children)) {
+        if ([state.article?.authorEl, state.article?.timeEl].some(kept => kept && sibling.contains(kept))) continue;
         // Unknown portals outside the site root remain available, including
         // native lightboxes and accessibility/verification interfaces.
         if (sibling !== node && (parent !== document.body || sibling.matches('.AppHeader, .Post-Sub, .Comments-container'))) hideElement(sibling);
@@ -226,8 +217,7 @@
   function markPath(rootEl) {
     let node = rootEl;
     while (node && node !== document.body && node !== HTML) {
-      node.setAttribute('data-zr-path', '');
-      state.pathMarked.push(node);
+      if (!node.hasAttribute('data-zr-path')) { node.setAttribute('data-zr-path', ''); state.pathMarked.push(node); }
       node = node.parentElement;
     }
   }
@@ -245,6 +235,23 @@
       if (el && el.isConnected) el.removeAttribute('data-zr-path');
     }
     state.pathMarked = [];
+    for (const { el, value } of state.roleMarked) {
+      if (value === null) el.removeAttribute('data-zr-role'); else el.setAttribute('data-zr-role', value);
+    }
+    state.roleMarked = [];
+  }
+
+  function markArticleRoles(article) {
+    for (const [role, el] of [['article', article.rootEl], ['title', article.titleEl], ['content', article.richEl], ['header', article.headerEl], ['author', article.authorEl], ['time', article.timeEl], ['cover', article.coverEl]]) {
+      if (!el) continue;
+      state.roleMarked.push({ el, value: el.getAttribute('data-zr-role') }); el.setAttribute('data-zr-role', role);
+    }
+    if (article.site === 'x') {
+      markPath(article.richEl.parentElement);
+      if (article.authorEl) markPath(article.authorEl.parentElement);
+      if (article.timeEl) markPath(article.timeEl.parentElement);
+    }
+    HTML.setAttribute('data-zr-site', article.site);
   }
 
   /* ---------------------------------------------------------- 阅读位置 */
@@ -254,7 +261,7 @@
     if (fallbackY <= 2) return { atTop: true, fallbackY };
     if (!article || !article.richEl.isConnected) return { fallbackY };
     const readingLine = Math.min(48, window.innerHeight / 3);
-    const blocks = [article.titleEl, ...article.richEl.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,figure,table')];
+    const blocks = [article.titleEl, ...Sites.articleBlocks(article.richEl)];
     for (const el of blocks) {
       const rect = el.getBoundingClientRect();
       if (!rect.width || rect.height <= 0 || rect.bottom <= readingLine || rect.top >= window.innerHeight) continue;
@@ -283,7 +290,9 @@
   function cleanPositions(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
     return Object.fromEntries(Object.entries(raw).filter(([url, p]) => {
-      return /^https?:\/\/[^/]+\/p\/[^/?#]+\/?$/.test(url) && p && typeof p === 'object' &&
+      let articleURL;
+      try { articleURL = new URL(url); } catch (_) { return false; }
+      return ['http:', 'https:'].includes(articleURL.protocol) && !articleURL.search && !articleURL.hash && Sites.articlePath(articleURL.pathname) && p && typeof p === 'object' &&
         Number.isFinite(p.updatedAt) && p.updatedAt > Date.now() - POSITION_TTL &&
         typeof p.text === 'string' && p.text.length <= 120 && typeof p.id === 'string' && p.id.length <= 200 &&
         Number.isFinite(p.fraction) && p.fraction >= 0 && p.fraction <= 1 &&
@@ -355,7 +364,7 @@
     if (state.userNavigated || location.hash || window.scrollY > 2) { stopResumeTracking(); return; }
     const saved = state.positions[routeKey()];
     if (!saved) { state.resumeAttempted = true; return; }
-    const blocks = Array.from(state.article.richEl.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,figure,table'));
+    const blocks = Sites.articleBlocks(state.article.richEl);
     const sameText = el => (el.textContent || '').trim().slice(0, 120) === saved.text;
     const byId = saved.id && document.getElementById(saved.id);
     const matches = blocks.filter(sameText);
@@ -407,13 +416,13 @@
 
   function refreshTOC() {
     if (!state.ui || !state.article) return;
-    const headings = Array.from(state.article.richEl.querySelectorAll('h1,h2,h3,h4')).filter(el => el.textContent.trim());
+    const headings = Sites.articleHeadings(state.article.richEl);
     const changed = headings.length !== state.headings.length || headings.some((el, i) => el !== state.headings[i]?.el || el.textContent !== state.headings[i]?.text);
     if (!changed) return;
     const list = state.ui.toc.querySelector('.zr-toc-list'); list.replaceChildren();
     state.headings = headings.map(el => {
       const button = document.createElement('button'); button.type = 'button';
-      button.textContent = el.textContent.trim(); button.style.paddingLeft = (12 + (Number(el.tagName.slice(1)) - 1) * 12) + 'px';
+      button.textContent = el.textContent.trim(); button.style.paddingLeft = (12 + (Sites.headingLevel(el) - 1) * 12) + 'px';
       button.addEventListener('click', () => {
         if (state.comments.length) toggleComments();
         state.userNavigated = true; stopResumeTracking();
@@ -449,6 +458,7 @@
 
   function toggleComments() {
     if (!state.ui || !state.article) return;
+    if (state.article.site === 'x') { showStatus('请退出阅读，使用 X 原页的回复入口。'); return; }
     const button = state.ui.toolbar.querySelector('[data-zr-act="comments"]');
     if (state.comments.length) {
       clearCommentMarkers(); hideNonArticle(state.article.rootEl);
@@ -482,7 +492,7 @@
   function onArticleImage(event) {
     if (!state.active || state.viewer || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const image = event.target.closest('img');
-    if (!image || !state.article.richEl.contains(image) || image.getBoundingClientRect().width < 48 || image.classList.contains('ztext-math')) return;
+    if (!image || (!state.article.richEl.contains(image) && image !== state.article.coverEl) || image.getBoundingClientRect().width < 48 || image.classList.contains('ztext-math') || image.src.includes('/profile_images/')) return;
     const source = image.currentSrc || image.src;
     if (!source || !/^(https?:|data:image\/|blob:)/i.test(source)) return;
     event.preventDefault(); event.stopPropagation(); stopResumeTracking();
@@ -1015,6 +1025,7 @@
 
     hideNonArticle(found.rootEl);
     markPath(found.rootEl);
+    markArticleRoles(found);
     HTML.setAttribute(ACTIVE_ATTR, 'on');
 
     state.active = true;
@@ -1042,6 +1053,7 @@
     destroyUI();
     restorePage();
     HTML.removeAttribute(ACTIVE_ATTR);
+    HTML.removeAttribute('data-zr-site');
     HTML.style.removeProperty('--zr-font-size');
     HTML.style.removeProperty('--zr-width');
     HTML.removeAttribute('data-zr-theme');
@@ -1062,7 +1074,7 @@
   /* ------------------------------------------------------------ 路由变化 */
 
   function routeKey() {
-    return location.origin + location.pathname;
+    return Citation.canonicalArticleURL(location.origin + location.pathname);
   }
 
   function handleRouteChange() {
@@ -1107,11 +1119,13 @@
       pending = setTimeout(() => {
         pending = null;
         handleRouteChange();
-        if (state.active) hideNonArticle(state.article.rootEl);
         if (state.active && hasCriticalDialog()) {
           exitReader(); showStatus('已恢复原页面，请先完成登录或验证。'); return;
         }
-        if (state.active && state.article?.rootEl.isConnected && state.article.richEl.isConnected) {
+        // React can retain a hidden old article while mounting its replacement.
+        // Re-identify before hiding siblings, or the new reader could be hidden too.
+        const current = state.active ? findArticle() : null;
+        if (state.active && current && current.rootEl === state.article.rootEl && current.richEl === state.article.richEl && current.titleEl === state.article.titleEl) {
           hideNonArticle(state.article.rootEl);
           refreshTOC();
           if (state.resumePending) resumeReading();
