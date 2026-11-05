@@ -12,7 +12,7 @@
 
 ## 开发
 
-需要 Node.js 20 或以上。当前项目没有第三方构建依赖，无需先运行 `npm install`。
+需要 Node.js 20 或以上。构建没有第三方运行依赖；执行 DOM 测试前请先运行 `npm ci` 安装锁定的开发依赖。
 
 ```bash
 npm run build
