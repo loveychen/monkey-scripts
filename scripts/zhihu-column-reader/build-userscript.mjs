@@ -9,11 +9,13 @@ if (!/^\d+\.\d+\.\d+$/.test(release.version)) throw new Error('Invalid release v
 let source = readFileSync(new URL('src/content.js', base), 'utf8');
 const css = readFileSync(new URL('src/reader.css', base), 'utf8');
 const citation = readFileSync(new URL('src/citation.mjs', base), 'utf8').replace(/^export /gm, '');
+const sites = readFileSync(new URL('src/sites.mjs', base), 'utf8').replace(/^export /gm, '');
 function replaceOnce(pattern, replacement) {
   if (!pattern.test(source)) throw new Error(`Missing build marker: ${pattern}`);
   source = source.replace(pattern, () => replacement);
 }
-replaceOnce(/  \/\/ Citation helpers are embedded here by build-userscript\.mjs\./, `  const Citation = (() => {\n${citation}\nreturn { readCitationMetadata, buildBibTeX, buildExcerpt };\n})();`);
+replaceOnce(/  \/\/ Citation helpers are embedded here by build-userscript\.mjs\./, `  const Citation = (() => {\n${citation}\nreturn { readCitationMetadata, buildBibTeX, buildExcerpt, canonicalArticleURL };\n})();`);
+replaceOnce(/  \/\/ Site helpers are embedded here by build-userscript\.mjs\./, `  const Sites = (() => {\n${sites}\nreturn { articlePath, findSiteArticle, articleBlocks, articleHeadings, headingLevel };\n})();`);
 replaceOnce(/  const STORE = \(\(\) => \{[\s\S]*?\n  \}\)\(\);/, `  const STORE = {
     async get(key) { return { [key]: await GM_getValue(key, null) }; },
     async set(values) {
@@ -61,12 +63,14 @@ const metadata = `// ==UserScript==
 // @name         知乎专栏 · 沉浸阅读
 // @namespace    local.zhihu-column-reader
 // @version      ${release.version}
-// @description  知乎专栏沉浸阅读，支持系统主题、目录、图片放大、断点续读、引用预览、BibTeX 导出和摘录带出处。
+// @description  知乎专栏与 X Articles 沉浸阅读，支持主题、目录、图片、断点续读、引用预览、BibTeX 和摘录出处。
 // @homepageURL  ${release.homepage}
 // @supportURL   ${release.support}
 // @updateURL    ${release.download}
 // @downloadURL  ${release.download}
 // @match        https://zhuanlan.zhihu.com/p/*
+// @match        https://x.com/*
+// @match        https://twitter.com/*
 // @run-at       document-start
 // @grant        GM_addStyle
 // @grant        GM_getValue
